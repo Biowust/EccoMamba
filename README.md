@@ -1,4 +1,3 @@
-
 # EccoMamba
 
 This repository is the official implementation of EccoNet. 
@@ -42,11 +41,9 @@ You can download pretrained models here:
 
 
 
-
 ## References
 [VMamba](https://github.com/MzeroMiko/VMamba)
 
 [VMUNet](https://github.com/JCruan519/VM-UNet?tab=readme-ov-file)
 
 [SwinUNet](https://github.com/HuCaoFighting/Swin-Unet?tab=readme-ov-file)
-
