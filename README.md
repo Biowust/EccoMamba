@@ -10,7 +10,7 @@ To install requirements:
 pip install -r requirements.txt
 ```
 ## DataSet
-You can download four processed datasets: ISIC 2018, ISIC 2017, ACDC, and Synapse. [click this]([https://zenodo.org/records/14626096](https://zenodo.org/records/16451011))
+You can download four processed datasets: ISIC 2018, ISIC 2017, ACDC, and Synapse. [click this](https://zenodo.org/records/14626096)
 
 ## Training
 
