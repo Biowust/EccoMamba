@@ -24,7 +24,7 @@ python train.py --datasets_name <dataset name> --epochs 1000 --batch_size 36 --w
 
 ## Evaluation
 
-You can download the best weights files for the four datasets for verification here.[click this]([https://zenodo.org/records/14626096](https://zenodo.org/records/16451011))
+You can download the best weights files for the four datasets for verification here.[click this](https://zenodo.org/records/14626096)
 
 To evaluate my model, run:
 ```eval
