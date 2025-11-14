@@ -24,7 +24,7 @@ width  = 256
 channels = 3
 
 ############################################################# Prepare PH2 data set #################################################
-Dataset_add = '/home/ljc/data/PH2'
+Dataset_add = '/data/ljc/data/PH2'
 Tr_add = 'images'
 
 Tr_list = glob.glob(Dataset_add+ Tr_add+'/*.jpg')

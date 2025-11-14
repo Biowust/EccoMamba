@@ -2,14 +2,13 @@ import time
 import math
 from functools import partial
 from typing import Optional, Callable
-import einops
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from einops import rearrange, repeat
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
-from .shift_cuda import BasicLayer_mlp, MyNorm
 try:
     from mamba_ssm.ops.selective_scan_interface import selective_scan_fn, selective_scan_ref
 except:
@@ -22,7 +21,6 @@ try:
 except:
     pass
 
-from mamba_ssm import Mamba2
 DropPath.__repr__ = lambda self: f"timm.DropPath({self.drop_prob})"
 
 
@@ -254,6 +252,7 @@ class SS2D(nn.Module):
         self,
         d_model,
         d_state=16,
+        # d_state="auto", # 20240109
         d_conv=3,
         expand=2,
         dt_rank="auto",
@@ -486,15 +485,10 @@ class VSSBlock(nn.Module):
     ):
         super().__init__()
         self.ln_1 = norm_layer(hidden_dim)
-        self.norm2 = nn.LayerNorm(hidden_dim)
         self.self_attention = SS2D(d_model=hidden_dim, dropout=attn_drop_rate, d_state=d_state, **kwargs)
         self.drop_path = DropPath(drop_path)
 
-        
-        # self.mlp = EinFFT(hidden_dim)
-
     def forward(self, input: torch.Tensor):
-        # B, H, W, C = input.shape
         x = input + self.drop_path(self.self_attention(self.ln_1(input)))
         return x
 
@@ -521,7 +515,7 @@ class VSSLayer(nn.Module):
         norm_layer=nn.LayerNorm, 
         downsample=None, 
         use_checkpoint=False, 
-        d_state=64,
+        d_state=16,
         **kwargs,
     ):
         super().__init__()
@@ -537,8 +531,8 @@ class VSSLayer(nn.Module):
                 d_state=d_state,
             )
             for i in range(depth)])
-  
-        if True: 
+        
+        if True: # is this really applied? Yes, but been overriden later in VSSM!
             def _init_weights(module: nn.Module):
                 for name, p in module.named_parameters():
                     if name in ["out_proj.weight"]:
@@ -546,9 +540,6 @@ class VSSLayer(nn.Module):
                         nn.init.kaiming_uniform_(p, a=math.sqrt(5))
             self.apply(_init_weights)
 
-        self.msc = MSC2(dim)
-        # self.ca = ChannelAttention(dim//2)
-        # self.sa = SpatialAttention(3)
         if downsample is not None:
             self.downsample = downsample(dim=dim, norm_layer=norm_layer)
         else:
@@ -556,38 +547,12 @@ class VSSLayer(nn.Module):
 
 
     def forward(self, x):
-        B, H ,W ,C = x.shape
-        # x1,x2 = torch.chunk(x,2,dim=3)
-        # msc_out = self.msc(x1)
-        # ca_out = x2*self.ca(x2)
-        # sa_out = ca_out*self.sa(ca_out)
-        # print('-----',x1.shape,x2.shape)
-        # print('-----',msc_out.shape,sa_out.shape)
-        # print('-----',x.shape)
-        # assert False
-        # x = x + torch.cat((msc_out, sa_out), dim=3)
-
-
-        # x1,x2 = torch.chunk(x,2,dim=3)
-        msc_out = self.msc(x)
-        x = x + msc_out
-        # ca_out = x1*self.ca(x1)
-        # sa_out1 = ca_out*self.sa(ca_out)
-
-        # ca_out = x2*self.ca(x2)
-        # sa_out2 = ca_out*self.sa(ca_out)
-        # sa_out = torch.cat((sa_out1,sa_out2),dim=3)
-        # print('-----',msc_out.shape,sa_out.shape)
-        # print('-----',x.shape)
-        
-        # x = x + torch.cat((msc_out, sa_out), dim=3)
-        # x = x + torch.cat((msc_out, sa_out), dim=3)
         for blk in self.blocks:
             if self.use_checkpoint:
                 x = checkpoint.checkpoint(blk, x)
             else:
                 x = blk(x)
-
+        
         if self.downsample is not None:
             x = self.downsample(x)
 
@@ -633,7 +598,6 @@ class VSSLayer_up(nn.Module):
                 d_state=d_state,
             )
             for i in range(depth)])
-
         
         if True: # is this really applied? Yes, but been overriden later in VSSM!
             def _init_weights(module: nn.Module):
@@ -648,6 +612,7 @@ class VSSLayer_up(nn.Module):
         else:
             self.upsample = None
 
+
     def forward(self, x):
         if self.upsample is not None:
             x = self.upsample(x)
@@ -656,9 +621,10 @@ class VSSLayer_up(nn.Module):
                 x = checkpoint.checkpoint(blk, x)
             else:
                 x = blk(x)
-        
         return x
     
+
+
 class VSSM(nn.Module):
     def __init__(self, patch_size=4, in_chans=3, num_classes=1000, depths=[2, 2, 9, 2], depths_decoder=[2, 9, 2, 2],
                  dims=[96, 192, 384, 768], dims_decoder=[768, 384, 192, 96], d_state=16, drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
@@ -704,21 +670,6 @@ class VSSM(nn.Module):
             )
             self.layers.append(layer)
 
-        # build as-mlp skip connection
-        self.asc = nn.ModuleList()
-        for i_layer in range(self.num_layers):
-            layer_as_mlp = BasicLayer_mlp(dim=dims[i_layer]//2,
-                                 input_resolution=(0, 0),
-                                 depth=depths[i_layer],
-                                 shift_size=1,
-                                 mlp_ratio=1,
-                                 drop=drop_rate,
-                                 drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer + 1])],
-                                 norm_layer=MyNorm,
-                                 downsample=None,
-                                 use_checkpoint=use_checkpoint)
-            self.asc.append(layer_as_mlp)
-
         self.layers_up = nn.ModuleList()
         for i_layer in range(self.num_layers):
             layer = VSSLayer_up(
@@ -737,6 +688,9 @@ class VSSM(nn.Module):
         self.final_up = Final_PatchExpand2D(dim=dims_decoder[-1], dim_scale=4, norm_layer=norm_layer)
         self.final_conv = nn.Conv2d(dims_decoder[-1]//4, num_classes, 1)
 
+        # self.norm = norm_layer(self.num_features)
+        # self.avgpool = nn.AdaptiveAvgPool1d(1)
+        # self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
 
         self.apply(self._init_weights)
 
@@ -767,28 +721,22 @@ class VSSM(nn.Module):
 
     def forward_features(self, x):
         skip_list = []
-        as_list = []
         x = self.patch_embed(x)
         if self.ape:
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
 
-        for layer, asc_layer in zip(self.layers, self.asc):
-            x1,x2 = torch.chunk(x,2,dim=3)
-            skip_list.append(x1)
-            as_list.append(asc_layer(x2))
+        for layer in self.layers:
+            skip_list.append(x)
             x = layer(x)
-        return x, skip_list, as_list
+        return x, skip_list
     
-    def forward_features_up(self, x, skip_list, as_list):
+    def forward_features_up(self, x, skip_list):
         for inx, layer_up in enumerate(self.layers_up):
             if inx == 0:
                 x = layer_up(x)
             else:
-                skip = torch.cat((skip_list[-inx], as_list[-inx]), dim=3)
-                in_ = x + skip
-                
-                x = layer_up(in_)
+                x = layer_up(x+skip_list[-inx])
 
         return x
     
@@ -809,130 +757,15 @@ class VSSM(nn.Module):
         return x
 
     def forward(self, x):
-        x, skip_list, as_list = self.forward_features(x)
-        x = self.forward_features_up(x, skip_list, as_list)
+        x, skip_list = self.forward_features(x)
+        x = self.forward_features_up(x, skip_list)
         x = self.forward_final(x)
         
         return x
 
-class MSC2(nn.Module):
-    def __init__(self, dim, kernel_size=3, stride=1, padding=1, proj_drop=0.,
-        **kwargs, ):
-        super().__init__()
-        
-        # maxpool占1/2的输入，attention占1/4的输入，dwconv占1/4的输入
-        self.maxpool_in = maxpool_in = dim // 2 # 1/2 of original input (since dim is already X/2)
-        self.attention_in = attention_in = dim // 4  # 1/8 of original input
-        self.dwconv_in = dwconv_in = dim // 4  # 1/8 of original input
-        
-        self.maxpool_dim = maxpool_dim = maxpool_in * 2
-        self.attention_dim = attention_dim = attention_in * 2
-        self.dwconv_dim = dwconv_dim = dwconv_in * 2
 
-        # MaxPool分支
-        self.Maxpool = nn.MaxPool2d(kernel_size, stride=stride, padding=padding)
-        self.proj_maxpool = nn.Conv2d(maxpool_in, maxpool_dim, kernel_size=1, stride=1, padding=0)
-        self.mid_gelu_maxpool = nn.GELU()
 
-        # Channel + Spatial Attention分支
-        self.attention_conv = nn.Conv2d(attention_in, attention_dim, kernel_size=1, stride=1, padding=0, bias=False)
-        self.attention_proj = nn.Conv2d(attention_dim, attention_dim, kernel_size=kernel_size, stride=stride, padding=padding, bias=False, groups=attention_dim)
-        self.mid_gelu_attention = nn.GELU()
-        
-        # 集成通道注意力和空间注意力
-        self.channel_attention = self._build_channel_attention(attention_dim)
-        self.spatial_attention = self._build_spatial_attention()
-
-        # DWconv分支
-        self.dwconv_conv = nn.Conv2d(dwconv_in, dwconv_dim, kernel_size=1, stride=1, padding=0, bias=False)
-        self.dwconv_proj = nn.Conv2d(dwconv_dim, dwconv_dim, kernel_size=kernel_size, stride=stride, padding=padding, bias=False, groups=dwconv_dim)
-        self.mid_gelu_dwconv = nn.GELU()
-
-        # 融合层
-        total_dim = maxpool_dim + attention_dim + dwconv_dim
-        self.conv_fuse = nn.Conv2d(total_dim, total_dim, kernel_size=3, stride=1, padding=1, bias=False, groups=total_dim)
-        self.proj = nn.Conv2d(total_dim, dim, kernel_size=1, stride=1, padding=0)
-        self.proj_drop = nn.Dropout(proj_drop)
-
-    def _build_channel_attention(self, in_planes, ratio=16):
-        """构建通道注意力模块"""
-        class ChannelAttentionModule(nn.Module):
-            def __init__(self, in_planes, ratio):
-                super().__init__()
-                self.avg_pool = nn.AdaptiveAvgPool2d(1)
-                self.max_pool = nn.AdaptiveMaxPool2d(1)
-                self.fc1 = nn.Conv2d(in_planes, in_planes // ratio, 1, bias=False)
-                self.relu1 = nn.ReLU()
-                self.fc2 = nn.Conv2d(in_planes // ratio, in_planes, 1, bias=False)
-                self.sigmoid = nn.Sigmoid()
-
-            def forward(self, x):
-                # 输入已经是 B C H W 格式
-                avg_out = self.fc2(self.relu1(self.fc1(self.avg_pool(x))))
-                max_out = self.fc2(self.relu1(self.fc1(self.max_pool(x))))
-                out = avg_out + max_out
-                return self.sigmoid(out)
-        
-        return ChannelAttentionModule(in_planes, ratio)
-
-    def _build_spatial_attention(self, kernel_size=7):
-        """构建空间注意力模块"""
-        class SpatialAttentionModule(nn.Module):
-            def __init__(self, kernel_size):
-                super().__init__()
-                assert kernel_size in (3, 7), 'kernel size must be 3 or 7'
-                padding = 3 if kernel_size == 7 else 1
-                self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=padding, bias=False)
-                self.sigmoid = nn.Sigmoid()
-
-            def forward(self, x):
-                # 输入已经是 B C H W 格式
-                avg_out = torch.mean(x, dim=1, keepdim=True)
-                max_out, _ = torch.max(x, dim=1, keepdim=True)
-                x = torch.cat([avg_out, max_out], dim=1)
-                x = self.conv1(x)
-                return self.sigmoid(x)
-        
-        return SpatialAttentionModule(kernel_size)
-        
-    def forward(self, x):
-        # B, H, W, C -> B, C, H, W
-        x = x.permute(0, 3, 1, 2)
-        # MaxPool分支 - 使用全部输入
-        maxpool_x = x[:, :self.maxpool_in, :, :].contiguous()  # 使用全部输入 (1/2 of original)
-        maxpool_x = self.Maxpool(maxpool_x)
-        maxpool_x = self.proj_maxpool(maxpool_x)
-        maxpool_x = self.mid_gelu_maxpool(maxpool_x)
-        
-        # Channel + Spatial Attention分支 - 使用1/4输入  
-        attention_x = x[:, self.maxpool_in:self.maxpool_in+self.attention_in, :, :].contiguous()  # 取前1/4通道
-        attention_x = self.attention_conv(attention_x)
-        attention_x = self.attention_proj(attention_x)
-        attention_x = self.mid_gelu_attention(attention_x)
-        
-        # 应用通道注意力
-        ca_weight = self.channel_attention(attention_x)
-        attention_x = attention_x * ca_weight
-        
-        # 应用空间注意力
-        sa_weight = self.spatial_attention(attention_x)
-        attention_x = attention_x * sa_weight
-        # DWconv分支 - 使用1/4输入
-        dwconv_x = x[:, self.attention_in+self.maxpool_in:, :, :].contiguous()  # 取接下来1/4通道
-        dwconv_x = self.dwconv_conv(dwconv_x)
-        dwconv_x = self.dwconv_proj(dwconv_x)
-        dwconv_x = self.mid_gelu_dwconv(dwconv_x)
-
-        # 拼接三个分支
-        x = torch.cat((maxpool_x, attention_x, dwconv_x), dim=1)
-
-        # 融合和投影
-        x = x + self.conv_fuse(x)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        
-        # B, C, H, W -> B, H, W, C
-        x = x.permute(0, 2, 3, 1)
-        return x
 
     
+
+

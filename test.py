@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from loader import *
 
 from models.EccoMamba.EccoMamba import EccoMamba
+from models.vmunet.vmunet import VMUNet
 from engine import *
 import os
 import sys
@@ -64,6 +65,14 @@ def main():
         drop_path_rate=model_cfg['drop_path_rate'],
         load_ckpt_path=model_cfg['load_ckpt_path'],
     )
+    # model = VMUNet(
+    #         num_classes=model_cfg['num_classes'],
+    #         input_channels=model_cfg['input_channels'],
+    #         depths=model_cfg['depths'],
+    #         depths_decoder=model_cfg['depths_decoder'],
+    #         drop_path_rate=model_cfg['drop_path_rate'],
+    #         load_ckpt_path=model_cfg['load_ckpt_path'],
+    #     )
     model.load_from()
     model = model.cuda()
 

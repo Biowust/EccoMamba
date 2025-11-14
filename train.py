@@ -5,6 +5,8 @@ from torch.utils.data import DataLoader
 from loader import *
 import matplotlib.pyplot as plt
 from models.EccoMamba.EccoMamba import EccoMamba
+from models.vmunet.vmunet import VMUNet
+
 from engine import *
 import os
 import sys
@@ -89,23 +91,6 @@ def main():
                                 num_workers=config.num_workers, 
                                 sampler=val_sampler,
                                 drop_last=True)
-    elif config.datasets_name == "monuseg":
-        train_tf= transforms.Compose([RandomGenerator_Monu(output_size=[config.img_size, config.img_size])])
-        val_tf = ValGenerator(output_size=[config.img_size, config.img_size])
-        train_dataset = ImageToImage2D(config.data_path, train_tf,image_size=config.img_size)
-        val_dataset = ImageToImage2D(config.volume_path, val_tf,image_size=config.img_size)
-        train_loader = DataLoader(train_dataset,
-                                batch_size=config.batch_size,
-                                shuffle=True,
-                                worker_init_fn=worker_init_fn,
-                                num_workers=2,
-                                pin_memory=True)
-        val_loader = DataLoader(val_dataset,
-                                batch_size=config.batch_size,
-                                shuffle=False,
-                                worker_init_fn=worker_init_fn,
-                                num_workers=1,
-                                pin_memory=True)
     print('#----------Prepareing Models----------#')
 
     model_cfg = config.model_config
@@ -117,6 +102,14 @@ def main():
         drop_path_rate=model_cfg['drop_path_rate'],
         load_ckpt_path=model_cfg['load_ckpt_path'],
     )
+    # model = VMUNet(
+    #     num_classes=model_cfg['num_classes'],
+    #     input_channels=model_cfg['input_channels'],
+    #     depths=model_cfg['depths'],
+    #     depths_decoder=model_cfg['depths_decoder'],
+    #     drop_path_rate=model_cfg['drop_path_rate'],
+    #     load_ckpt_path=model_cfg['load_ckpt_path'],
+    # )
     model.load_from()
     model = model.cuda()
 

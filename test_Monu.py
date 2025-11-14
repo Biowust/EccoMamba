@@ -109,17 +109,17 @@ if __name__ == '__main__':
 
     test_num = 14
 
-    model_path = '/home/ljc/source/outputs/VMUnet/monuseg/epoch_300_0.9078500270843506.pth'
-    vis_path = '/home/ljc/source/outputs/VMUnet/monuseg/test/vis/'
+    model_path = '/data/ljc/source/outputs/VMUnet/monuseg/epoch_300_0.9078500270843506.pth'
+    vis_path = '/data/ljc/source/outputs/VMUnet/monuseg/test/vis/'
     if not os.path.exists(vis_path):
         os.makedirs(vis_path)
     parser = argparse.ArgumentParser()
     parser.add_argument('--test_path', type=str,
-                    default='/home/ljc/source/data/MoNuSeg/Val_Folder/', help='root dir for validation volume data')
+                    default='/data/ljc/source/data/MoNuSeg/Val_Folder/', help='root dir for validation volume data')
     parser.add_argument('--num_classes', type=int,
                     default=1, help='output channel of network')     
     parser.add_argument('--img_size', type=int, default=224, help='input patch size of network input')
-    parser.add_argument('--cfg', type=str, default='/home/ljc/source/SWMA-UNet/configs/swin_tiny_patch4_window7_224_lite.yaml',metavar="FILE", help='path to config file', )    
+    parser.add_argument('--cfg', type=str, default='/data/ljc/source/SWMA-UNet/configs/swin_tiny_patch4_window7_224_lite.yaml',metavar="FILE", help='path to config file', )    
     parser.add_argument(
         "--opts",
         help="Modify config options by adding 'KEY VALUE' pairs. ",
@@ -168,7 +168,19 @@ if __name__ == '__main__':
     if torch.cuda.device_count() > 1:
         print ("Let's use {0} GPUs!".format(torch.cuda.device_count()))
         model = nn.DataParallel(model, device_ids=[0,1,2,3])
-    model.load_state_dict(checkpoint['model_state_dict'])
+    # Handle DataParallel prefix issue
+    state_dict = checkpoint['model_state_dict']
+    if isinstance(state_dict, dict):
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith('module.'):
+                new_key = k[7:]  # Remove 'module.' prefix
+            else:
+                new_key = k
+            new_state_dict[new_key] = v
+        state_dict = new_state_dict
+    
+    model.load_state_dict(state_dict, strict=False)
     print('Model loaded !')
     tf_test = ValGenerator(output_size=[args.img_size, args.img_size])
     test_dataset = ImageToImage2D(args.test_path, tf_test,image_size=args.img_size)

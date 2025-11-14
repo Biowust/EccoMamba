@@ -27,7 +27,7 @@ class setting_config:
 
         args.datasets_name = args.datasets_name.lower()
         if args.work_dir is None:
-            args.work_dir = '/home/ljc/source/outputs/EccoMamba/'+ args.datasets_name + '/' +  datetime.now().strftime('%Y_%B_%d_%Hh_%Mm') + '/'
+            args.work_dir = '/data/ljc/source/outputs/EccoMamba/'+ args.datasets_name + '/' +  datetime.now().strftime('%Y_%B_%d_%Hh_%Mm') + '/'
 
         for k, v in vars(args).items():
             if v is not None:
@@ -36,34 +36,27 @@ class setting_config:
     @classmethod
     def set_datasets(cls):
         if cls.datasets_name == 'isic2017':
-            cls.data_path = '/home/ljc/source/data/ISIC2017/'
+            cls.data_path = '/data/ljc/source/data/ISIC2017/'
             cls.datasets = isic_loader
             cls.criterion = BceDiceLoss(0.3,0.7)
         elif cls.datasets_name == 'isic2018':
-            cls.data_path = '/home/ljc/source/data/ISIC2018/'
+            cls.data_path = '/data/ljc/source/data/ISIC2018/'
             cls.datasets = isic_loader
             cls.criterion = BceDiceLoss(0.3,0.7)
         elif cls.datasets_name == 'synapse':
-            cls.data_path = '/home/ljc/source/data/Synapse/train_npz/'
+            cls.data_path = '/data/ljc/source/data/Synapse/train_npz/'
             cls.datasets = Synapse_dataset
-            cls.list_dir = '/home/ljc/source/MC-UNet-mamba/lists/lists_Synapse/'
-            cls.volume_path = '/home/ljc/source/data/Synapse/test_vol_h5/'
+            cls.list_dir = '/data/ljc/source/MC-UNet-mamba/lists/lists_Synapse/'
+            cls.volume_path = '/data/ljc/source/data/Synapse/test_vol_h5/'
             cls.model_config['num_classes'] = 9
             cls.criterion = CeDiceLoss(9, cls.loss_weight)
         elif cls.datasets_name == 'acdc':
-            cls.data_path = '/home/ljc/source/data/ACDC/'
+            cls.data_path = '/data/ljc/source/data/ACDC/'
             cls.datasets = ACDC_dataset
-            cls.list_dir = '/home/ljc/source/MC-UNet-mamba/lists/lists_ACDC/'
-            cls.volume_path = '/home/ljc/source/data/ACDC/test'
+            cls.list_dir = '/data/ljc/source/MC-UNet-mamba/lists/lists_ACDC/'
+            cls.volume_path = '/data/ljc/source/data/ACDC/test'
             cls.model_config['num_classes'] = 4
             cls.criterion = CeDiceLoss(4, cls.loss_weight)
-        elif cls.datasets_name == 'monuseg':
-            cls.data_path = '/home/ljc/source/data/MoNuSeg/Train_Folder'
-            # cls.datasets = ACDC_dataset
-            cls.list_dir = '/home/ljc/source/MC-UNet-mamba/lists/lists_ACDC/'
-            cls.volume_path = '/home/ljc/source/data/MoNuSeg/Val_Folder'
-            cls.model_config['num_classes'] = 1
-            cls.criterion = WeightedDiceBCE()
         else:
             raise Exception('datasets_name in not right!')
         print('data path:', cls.data_path)
@@ -160,16 +153,6 @@ class setting_config:
             cls.warm_up_epochs = 20
 
 
-
-    # network = 'UltraLight_VM_UNet' 
-    # model_config = {
-    #     'num_classes': 1,
-    #     'input_channels': 3,
-    #     'c_list': [8,16,24,32,48,64],
-    #     'split_att': 'fc',
-    #     'bridge': False,
-    # }
-    # network = 'vmunet'
     model_config = {
         'num_classes': 1, 
         'input_channels': 3, 
@@ -177,7 +160,7 @@ class setting_config:
         'depths': [2,2,2,2],
         'depths_decoder': [2,2,2,1],
         'drop_path_rate': 0.2,
-        'load_ckpt_path': '/home/ljc/source/EccoMamba/pre_trained_weights/vmamba_small_e238_ema.pth',
+        'load_ckpt_path': '/data/ljc/source/EccoMamba/pre_trained_weights/vmamba_small_e238_ema.pth',
     }
 
     test_weights = ''
